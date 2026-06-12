@@ -51,6 +51,16 @@ dotnet run --project XFinder.csproj          # 개발 실행
 dotnet publish -c Release -r win-x64         # 배포 빌드
 ```
 
+## 설치 마법사 만들기 (Inno Setup)
+
+```powershell
+# 1) 자체 포함 배포본 게시 (.NET 런타임 불필요한 단독 실행본)
+dotnet publish XFinder.csproj -c Release -r win-x64 --self-contained true -o build\publish
+# 2) Inno Setup 6 으로 컴파일 (winget install JRSoftware.InnoSetup)
+ISCC.exe Scripts\installer.iss
+# → build\XFinder-Setup-1.0.0.exe (한국어/영어 위저드, 사용자 단위 설치 — UAC 불필요)
+```
+
 ## 키보드 단축키
 
 (대화상자·텍스트 입력 중에는 자동으로 비활성화됩니다.)
