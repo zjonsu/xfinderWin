@@ -233,8 +233,11 @@ public partial class UninstallWindow : Window
     private static string DisplayPathOf(string path)
     {
         var parent = Path.GetDirectoryName(path.TrimEnd('\\')) ?? path;
-        var home = AppModel.HomePath;
-        if (parent.StartsWith(home, StringComparison.OrdinalIgnoreCase))
+        var home = AppModel.HomePath.TrimEnd('\\');
+        // 경로 경계 확인 — "C:\Users\me"가 "C:\Users\meow\..."에 매칭되지 않게
+        if (string.Equals(parent, home, StringComparison.OrdinalIgnoreCase))
+            return "~";
+        if (parent.StartsWith(home + "\\", StringComparison.OrdinalIgnoreCase))
             return "~" + parent[home.Length..];
         return parent;
     }

@@ -372,6 +372,9 @@ public partial class SidebarView : UserControl
         try
         {
             var data = new DataObject(DataFormats.FileDrop, new[] { item.Path });
+            // 외부 앱 드롭 기본을 복사로 유도 — 원본이 사라지지 않게 (스펙 03 §3.5)
+            data.SetData("Preferred DropEffect",
+                new System.IO.MemoryStream(BitConverter.GetBytes((int)DragDropEffects.Copy)), false);
             DragDrop.DoDragDrop(row, data, DragDropEffects.Move | DragDropEffects.Copy);
         }
         catch { }

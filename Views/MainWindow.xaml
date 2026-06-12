@@ -68,8 +68,10 @@
                                    Fill="{DynamicResource TextSecondaryBrush}" Opacity="0.25"/>
                         <StackPanel Orientation="Horizontal">
                             <Button x:Name="BtnBack" Style="{StaticResource NavButton}" Margin="0,0,2,0"
+                                    ToolTipService.ShowOnDisabled="True"
                                     Content="&#xE76B;" ToolTip="뒤로 — 이전 폴더로 이동 (Alt+←)" Click="OnGoBack"/>
                             <Button x:Name="BtnForward" Style="{StaticResource NavButton}" Margin="0,0,2,0"
+                                    ToolTipService.ShowOnDisabled="True"
                                     Content="&#xE76C;" ToolTip="앞으로 — 다음 폴더로 이동 (Alt+→)" Click="OnGoForward"/>
                             <Button x:Name="BtnUp" Style="{StaticResource NavButton}"
                                     Content="&#xE70E;" ToolTip="상위 폴더로 이동 (Alt+↑)" Click="OnGoUp"/>
@@ -83,6 +85,7 @@
                                     ToolTip="한글 자소 분리(NFD) 파일명 복원 — 클릭: 이 폴더 / 우클릭: 하위 폴더까지"
                                     Click="OnHangulFix" MouseRightButtonUp="OnHangulMenu"/>
                             <Button x:Name="BtnAI" Style="{StaticResource NavButton}"
+                                    ToolTipService.ShowOnDisabled="True"
                                     FontFamily="Segoe UI Emoji" Content="✨" Click="OnAIOrganize"/>
                         </StackPanel>
                     </StackPanel>

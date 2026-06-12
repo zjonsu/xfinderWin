@@ -34,7 +34,10 @@ public static class SettingsStore
         try
         {
             Directory.CreateDirectory(Dir);
-            File.WriteAllText(FilePath, _root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            // 원자적 저장 — 쓰기 도중 크래시 시 설정 전체 소실 방지
+            var tmp = FilePath + ".tmp";
+            File.WriteAllText(tmp, _root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            File.Move(tmp, FilePath, overwrite: true);
         }
         catch { /* 저장 실패는 치명적이지 않음 */ }
     }

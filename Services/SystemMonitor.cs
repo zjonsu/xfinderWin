@@ -688,7 +688,15 @@ public sealed class SystemMonitor : ObservableObject
     /// 주의: prev 맵이 인스턴스에 1개뿐 — 호출처를 CPU 팝업 타이머(2초) 하나로 유지할 것.
     /// 멀티코어에서 100%를 넘을 수 있음(원본 동일 — 코어 수로 나누지 않음).
     /// </summary>
+    private readonly object _procCpuLock = new();   // 다중 창 CPU 팝업의 델타 상태 경합 방지
+
     public List<CpuProc> TopCpuProcesses(int limit = 5)
+    {
+        lock (_procCpuLock)
+            return TopCpuProcessesCore(limit);
+    }
+
+    private List<CpuProc> TopCpuProcessesCore(int limit)
     {
         var now = DateTime.UtcNow;
         var current = new Dictionary<int, long>();

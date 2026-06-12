@@ -226,8 +226,11 @@ public static class TagService
         try
         {
             Directory.CreateDirectory(SettingsStore.Dir);
-            File.WriteAllText(DbPath, JsonSerializer.Serialize(_db,
+            // 원자적 저장 — 쓰기 도중 크래시 시 태그 DB 전체 소실 방지
+            var tmp = DbPath + ".tmp";
+            File.WriteAllText(tmp, JsonSerializer.Serialize(_db,
                 new JsonSerializerOptions { WriteIndented = true }));
+            File.Move(tmp, DbPath, overwrite: true);
         }
         catch { /* 저장 실패는 치명적이지 않음 */ }
     }

@@ -56,6 +56,19 @@ public static class FileOperations
                 var name = WindowsName.Sanitize(original);
                 OnUi(() => progress.CurrentFile = original);   // 정리 전 이름 표시
 
+                // 폴더를 자기 자신/자기 하위로 복사·이동 금지 — CopyDirectory 무한 재귀 방지
+                if (Directory.Exists(srcTrimmed))
+                {
+                    var srcNorm = NormalizeDir(srcTrimmed);
+                    if (string.Equals(destNorm, srcNorm, StringComparison.OrdinalIgnoreCase)
+                        || destNorm.StartsWith(srcNorm + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    {
+                        failures.Add($"{name}: 대상 폴더가 원본 폴더 자신이거나 그 안에 있습니다.");
+                        OnUi(() => progress.CompletedUnits += 1);
+                        continue;
+                    }
+                }
+
                 // 같은 폴더로의 이동은 no-op (Finder 동작). 이름 정리가 필요하면 같은 폴더라도 진행.
                 string parent = "";
                 try { parent = Path.GetDirectoryName(Path.GetFullPath(srcTrimmed)) ?? ""; } catch { }
@@ -69,9 +82,11 @@ public static class FileOperations
                 var dest = Path.Combine(destDir, name);
                 if (File.Exists(dest) || Directory.Exists(dest))
                 {
-                    var stem = WindowsName.Sanitize(Path.GetFileNameWithoutExtension(original));
-                    var ext = Path.GetExtension(original).TrimStart('.');   // 확장자는 sanitize하지 않음
-                    dest = UniqueUrl(destDir, stem, ext);
+                    var stem0 = Path.GetFileNameWithoutExtension(original);
+                    var ext0 = Path.GetExtension(original).TrimStart('.');   // 확장자는 sanitize하지 않음
+                    // 폴더("v1.2") 또는 도트파일(".gitignore")은 이름 전체를 stem으로
+                    if (Directory.Exists(srcTrimmed) || stem0.Length == 0) { stem0 = original; ext0 = ""; }
+                    dest = UniqueUrl(destDir, WindowsName.Sanitize(stem0), ext0);
                 }
 
                 try
@@ -112,9 +127,11 @@ public static class FileOperations
                 try
                 {
                     var dir = Path.GetDirectoryName(Path.GetFullPath(srcTrimmed)) ?? "";
-                    var stem = WindowsName.Sanitize(Path.GetFileNameWithoutExtension(original)) + " copy";
-                    var ext = Path.GetExtension(original).TrimStart('.');
-                    var dest = UniqueUrl(dir, stem, ext);
+                    var stem0 = Path.GetFileNameWithoutExtension(original);
+                    var ext0 = Path.GetExtension(original).TrimStart('.');
+                    // 폴더("v1.2") 또는 도트파일(".gitignore")은 이름 전체를 stem으로
+                    if (Directory.Exists(srcTrimmed) || stem0.Length == 0) { stem0 = original; ext0 = ""; }
+                    var dest = UniqueUrl(dir, WindowsName.Sanitize(stem0) + " copy", ext0);
                     CopyItem(srcTrimmed, dest);
                     created.Add(dest);
                 }
@@ -160,7 +177,11 @@ public static class FileOperations
                 });
 
                 bool cancelled = false;
-                using (var stream = new FileStream(destZip, FileMode.CreateNew, FileAccess.Write))
+                // CreateNew 자체가 실패(동명 파일 존재 등)하면 기존 파일을 건드리지 않고 종료
+                FileStream stream;
+                try { stream = new FileStream(destZip, FileMode.CreateNew, FileAccess.Write); }
+                catch (Exception ex) { return $"zip failed (0):\n{ex.Message}"; }
+                using (stream)
                 using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: false,
                                                     entryNameEncoding: Encoding.UTF8))
                 {

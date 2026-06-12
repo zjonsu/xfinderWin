@@ -58,7 +58,12 @@ public sealed class AppModel : ObservableObject
     /// <summary>즐겨찾기 드래그 중 경로 (재정렬 UI용).</summary>
     public string? DraggingFavorite { get; set; }
 
-    public ClipboardState? InternalClipboard { get; private set; }
+    private ClipboardState? _internalClipboard;
+    public ClipboardState? InternalClipboard
+    {
+        get => _internalClipboard;
+        private set => Set(ref _internalClipboard, value);
+    }
     private uint _clipboardSequence = unchecked((uint)~0u);
 
     /// <summary>텍스트 입력 중 — 키 모니터/type-select 전부 정지.</summary>
@@ -638,7 +643,9 @@ public sealed class AppModel : ObservableObject
         else { pane.RawItems = new(); pane.LoadError = error; }
 
         pane.Rebuild(ShowHidden);
-        pane.Cursor = pane.Items.FirstOrDefault()?.Path;
+        // RevealInList가 미리 지정한 커서(새 목록에 존재)는 보존 — 일반 탐색은 Select가 null로 리셋함
+        if (pane.Cursor is null || !pane.Items.Any(i => PathEquals(i.Path, pane.Cursor)))
+            pane.Cursor = pane.Items.FirstOrDefault()?.Path;
         ComputeFolderSizes();
         UpdateFreeSpace(dir);
     }
@@ -877,6 +884,7 @@ public sealed class AppModel : ObservableObject
 
     public async void ShowRecents()
     {
+        _listCts?.Cancel();
         _searchCts?.Cancel();
         _tagCts?.Cancel();
         _recentsCts?.Cancel();
@@ -1051,6 +1059,7 @@ public sealed class AppModel : ObservableObject
             return;
         }
 
+        _listCts?.Cancel();
         _tagCts?.Cancel();
         _recentsCts?.Cancel();
         pane.TagMode = false; pane.TypeMode = false; pane.RecentsMode = false;
@@ -1285,10 +1294,12 @@ public sealed class AppModel : ObservableObject
         }
 
         TypeSelectDisplay = _typeSelectRaw.Length > 0 ? _typeSelectRaw : chars;
-        _typeSelectHideTimer?.Stop();
-        _typeSelectHideTimer ??= new DispatcherTimer();
-        _typeSelectHideTimer.Interval = TypeSelectHudHide;
-        _typeSelectHideTimer.Tick += TypeSelectHideTick;
+        if (_typeSelectHideTimer is null)
+        {
+            _typeSelectHideTimer = new DispatcherTimer { Interval = TypeSelectHudHide };
+            _typeSelectHideTimer.Tick += TypeSelectHideTick;   // 구독은 1회만 (키 입력마다 누적 금지)
+        }
+        _typeSelectHideTimer.Stop();
         _typeSelectHideTimer.Start();
         return true;
     }
@@ -1296,8 +1307,6 @@ public sealed class AppModel : ObservableObject
     private void TypeSelectHideTick(object? sender, EventArgs e)
     {
         _typeSelectHideTimer?.Stop();
-        if (_typeSelectHideTimer is not null) _typeSelectHideTimer.Tick -= TypeSelectHideTick;
-        _typeSelectHideTimer = null;
         TypeSelectDisplay = null;
     }
 
@@ -1729,8 +1738,10 @@ public sealed class AppModel : ObservableObject
             try
             {
                 var dir = Path.GetDirectoryName(item.Path.TrimEnd('\\')) ?? SelectedFolder;
-                var baseName = WindowsName.Sanitize(Path.GetFileNameWithoutExtension(item.Name));
+                var stem = item.IsDirectory ? item.Name : Path.GetFileNameWithoutExtension(item.Name);
                 var ext = item.IsDirectory ? "" : Path.GetExtension(item.Name);
+                if (stem.Length == 0) { stem = item.Name; ext = ""; }   // ".gitignore" 같은 도트파일
+                var baseName = WindowsName.Sanitize(stem);
                 var destPath = UniquePath(dir, $"{baseName} copy{ext}");
                 var src = item.Path;
                 await Task.Run(() => CopyEntry(src, destPath));
@@ -2030,6 +2041,12 @@ public sealed class AppModel : ObservableObject
         {
             foreach (var op in ops)
             {
+                // LLM이 반환한 파일명의 경로 탈출 방지 — 현재 폴더 직속 이름만 허용
+                if (op.File.IndexOfAny(new[] { '\\', '/' }) >= 0 || op.File is "." or "..")
+                {
+                    failures.Add($"{op.File}: 잘못된 파일 이름");
+                    continue;
+                }
                 var src = Path.Combine(dir, op.File);
                 if (!File.Exists(src) && !Directory.Exists(src))
                 {
@@ -2067,9 +2084,9 @@ public sealed class AppModel : ObservableObject
         ReloadDetail();
         RefreshSidebar(dir);
         var parts = new List<string>();
-        if (moved > 0) parts.Add($"AI가 {moved}개 정리");
+        if (moved > 0) parts.Add($"{moved}개 정리");
         if (deleted > 0) parts.Add($"{deleted}개 휴지통으로 이동");
-        var doneText = parts.Count > 0 ? string.Join(", ", parts) + "했습니다." : "처리한 항목이 없습니다";
+        var doneText = parts.Count > 0 ? "AI가 " + string.Join(", ", parts) + "했습니다." : "처리한 항목이 없습니다";
         if (failures.Count == 0)
         {
             InfoMessage = doneText;

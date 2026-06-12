@@ -32,7 +32,13 @@ public partial class MainWindow : Window
         Model.Tabs.CollectionChanged += OnTabsChanged;
         Model.SettingsRequested += () => SettingsWindowPresenter.Show(Model);
 
-        SourceInitialized += (_, _) => ThemeService.ApplyChrome(this);
+        SourceInitialized += (_, _) =>
+        {
+            ThemeService.ApplyChrome(this);
+            // 커스텀 WindowChrome 창은 최대화 시 프레임 두께만큼 화면 밖으로 넘침 — 작업 영역으로 보정
+            if (PresentationSource.FromVisual(this) is System.Windows.Interop.HwndSource src)
+                src.AddHook(MaximizeBoundsHook);
+        };
         Loaded += OnLoaded;
         StateChanged += (_, _) => BtnMax.Content = WindowState == WindowState.Maximized ? "" : "";
         PreviewKeyDown += OnGlobalKeyDown;
@@ -123,9 +129,14 @@ public partial class MainWindow : Window
         switch (e.PropertyName)
         {
             case nameof(PaneTab.Directory):
-            case nameof(PaneTab.Items):
                 ExitPathEdit();
                 BuildPathBar();
+                UpdateTitle();
+                RefreshTabBar();
+                break;
+            case nameof(PaneTab.Items):
+                // 폴더 용량 계산 등 비동기 Items 재할당이 경로 입력을 강제 종료하지 않게
+                if (!_pathEditMode) BuildPathBar();
                 UpdateTitle();
                 RefreshTabBar();
                 break;
@@ -190,6 +201,52 @@ public partial class MainWindow : Window
                 : Model.IsExcluded(Model.SelectedFolder)
                     ? "이 폴더는 AI 정리 예외 폴더로 지정되어 정리할 수 없습니다"
                     : "AI 파일 정리 — 프롬프트로 현재 폴더 파일 정리 (로컬 LLM)";
+    }
+
+    // ── 최대화 보정 (WM_GETMINMAXINFO) ───────────────────────────────────
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct W32Point { public int X, Y; }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct W32Rect { public int Left, Top, Right, Bottom; }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MinMaxInfo
+    {
+        public W32Point ptReserved, ptMaxSize, ptMaxPosition, ptMinTrackSize, ptMaxTrackSize;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public int cbSize;
+        public W32Rect rcMonitor, rcWork;
+        public int dwFlags;
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MonitorInfo info);
+
+    private static IntPtr MaximizeBoundsHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_GETMINMAXINFO = 0x0024;
+        if (msg != WM_GETMINMAXINFO) return IntPtr.Zero;
+        var hMon = MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
+        if (hMon == IntPtr.Zero) return IntPtr.Zero;
+        var mi = new MonitorInfo { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(hMon, ref mi)) return IntPtr.Zero;
+        var mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<MinMaxInfo>(lParam);
+        mmi.ptMaxPosition.X = mi.rcWork.Left - mi.rcMonitor.Left;
+        mmi.ptMaxPosition.Y = mi.rcWork.Top - mi.rcMonitor.Top;
+        mmi.ptMaxSize.X = mi.rcWork.Right - mi.rcWork.Left;
+        mmi.ptMaxSize.Y = mi.rcWork.Bottom - mi.rcWork.Top;
+        System.Runtime.InteropServices.Marshal.StructureToPtr(mmi, lParam, true);
+        handled = true;
+        return IntPtr.Zero;
     }
 
     private void OnMinimize(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
@@ -331,7 +388,8 @@ public partial class MainWindow : Window
         }
         if (_pathEditMode) { PathBarHost.Children.Add(BuildPathEditor()); return; }
 
-        var dock = new DockPanel { LastChildFill = true };
+        // 배경 없으면 빈 영역이 히트테스트되지 않아 더블클릭 편집 진입 불가
+        var dock = new DockPanel { LastChildFill = true, Background = Brushes.Transparent };
 
         var pencil = new Button
         {
@@ -673,6 +731,12 @@ public partial class MainWindow : Window
                 bg.Background = new SolidColorBrush(Color.FromArgb((byte)((focused ? 1.0 : 0.75) * 255), 0xE8, 0x3B, 0x30));
                 btn.Foreground = Brushes.White;
             }
+            else
+            {
+                // 직전 destructive 확인의 빨간 스타일이 잔존하지 않게 복원
+                bg.Background = (Brush)FindResource("SelectionInactiveBrush");
+                btn.Foreground = (Brush)FindResource("TextPrimaryBrush");
+            }
         }
         else
         {
@@ -713,12 +777,15 @@ public partial class MainWindow : Window
         // 텍스트 입력 중에는 가로채지 않음 (검색창/경로 입력 등)
         if (Model.TextInputActive)
         {
-            if (e.Key == Key.Escape && ReferenceEquals(Keyboard.FocusedElement, ToolbarSearchBox)
-                || e.Key == Key.Escape && ReferenceEquals(Keyboard.FocusedElement, BelowSearchBox))
+            if (e.Key == Key.Escape && (ReferenceEquals(Keyboard.FocusedElement, ToolbarSearchBox)
+                || ReferenceEquals(Keyboard.FocusedElement, BelowSearchBox)))
             {
                 Model.UpdateSearch("");
                 Model.FocusedPane = FocusPane.Detail;
-                Keyboard.ClearFocus();
+                // ClearFocus는 포커스를 null로 만들어 이후 키 이벤트가 창에 오지 않음 — 창으로 이동
+                FocusManager.SetFocusedElement(this, null);
+                Keyboard.Focus(this);
+                Model.TextInputActive = false;
                 e.Handled = true;
             }
             return;
@@ -729,7 +796,7 @@ public partial class MainWindow : Window
         var alt = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
 
-        // Alt 계열 탐색
+        // Alt 계열 탐색 — 미처리 Alt 조합(Alt+F4, Alt+Space 등)은 시스템 기본 처리에 위임
         if (alt)
         {
             switch (key)
@@ -737,7 +804,10 @@ public partial class MainWindow : Window
                 case Key.Left: Model.GoBack(); e.Handled = true; return;
                 case Key.Right: Model.GoForward(); e.Handled = true; return;
                 case Key.Up: Model.GoUp(); e.Handled = true; return;
+                case Key.Down: Model.OpenSelected(); e.Handled = true; return;
+                case Key.Enter: Model.GetInfoSelection(); e.Handled = true; return;   // Alt+Enter = 속성
             }
+            return;
         }
 
         // Ctrl 계열

@@ -33,9 +33,10 @@ public sealed class FileItem : IEquatable<FileItem>
         IsParent = true,
     };
 
-    public bool Equals(FileItem? other) => other is not null && Path == other.Path;
+    public bool Equals(FileItem? other)
+        => other is not null && string.Equals(Path, other.Path, StringComparison.OrdinalIgnoreCase);
     public override bool Equals(object? obj) => Equals(obj as FileItem);
-    public override int GetHashCode() => Path.GetHashCode();
+    public override int GetHashCode() => StringComparer.OrdinalIgnoreCase.GetHashCode(Path);
 }
 
 // ── 표시 포맷팅 ──────────────────────────────────────────────────────────

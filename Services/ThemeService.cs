@@ -13,7 +13,7 @@ public enum AppTheme { System, Light, Dark }
 /// </summary>
 public static class ThemeService
 {
-    public const string SettingsKey = "appearanceMode";
+    public const string SettingsKey = "XFinder.appearance.v1";   // 스펙 02 §11 키 체계
 
     public static AppTheme Current { get; private set; } = AppTheme.System;
 
@@ -21,7 +21,9 @@ public static class ThemeService
 
     public static void Initialize()
     {
-        var saved = SettingsStore.Get<string>(SettingsKey, "system");
+        // 구버전 키("appearanceMode") 마이그레이션 폴백
+        var saved = SettingsStore.Get<string>(SettingsKey)
+                    ?? SettingsStore.Get<string>("appearanceMode", "system");
         Current = saved switch { "light" => AppTheme.Light, "dark" => AppTheme.Dark, _ => AppTheme.System };
         Apply(Current, save: false);
         SystemEvents.UserPreferenceChanged += (_, e) =>

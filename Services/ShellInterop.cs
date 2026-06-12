@@ -15,8 +15,23 @@ public static class ShellInterop
 {
     // ── 휴지통 (FOF_ALLOWUNDO) ──────────────────────────────────────────
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    // SHFILEOPSTRUCT는 shellapi.h에서 32비트 빌드만 1바이트 패킹 — 64비트는 자연 정렬.
+    // Pack=1을 64비트에 쓰면 pFrom 오프셋이 어긋나 휴지통 이동이 실패/크래시한다.
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct SHFILEOPSTRUCT
+    {
+        public IntPtr hwnd;
+        public uint wFunc;
+        [MarshalAs(UnmanagedType.LPWStr)] public string pFrom;
+        [MarshalAs(UnmanagedType.LPWStr)] public string? pTo;
+        public ushort fFlags;
+        [MarshalAs(UnmanagedType.Bool)] public bool fAnyOperationsAborted;
+        public IntPtr hNameMappings;
+        [MarshalAs(UnmanagedType.LPWStr)] public string? lpszProgressTitle;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode, Pack = 1)]
+    private struct SHFILEOPSTRUCT32
     {
         public IntPtr hwnd;
         public uint wFunc;
@@ -33,8 +48,11 @@ public static class ShellInterop
     private const ushort FOF_NOCONFIRMATION = 0x0010;
     private const ushort FOF_SILENT = 0x0004;
 
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHFileOperationW")]
     private static extern int SHFileOperation(ref SHFILEOPSTRUCT fileOp);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHFileOperationW")]
+    private static extern int SHFileOperation32(ref SHFILEOPSTRUCT32 fileOp);
 
     /// <summary>파일/폴더들을 휴지통으로 이동. 성공 여부 반환.</summary>
     public static bool MoveToRecycleBin(IEnumerable<string> paths)
@@ -42,13 +60,17 @@ public static class ShellInterop
         var list = paths.ToList();
         if (list.Count == 0) return true;
         var from = string.Join("\0", list) + "\0\0";
-        var op = new SHFILEOPSTRUCT
+        const ushort flags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT;
+        if (IntPtr.Size == 8)
         {
-            wFunc = FO_DELETE,
-            pFrom = from,
-            fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT,
-        };
-        return SHFileOperation(ref op) == 0 && !op.fAnyOperationsAborted;
+            var op = new SHFILEOPSTRUCT { wFunc = FO_DELETE, pFrom = from, fFlags = flags };
+            return SHFileOperation(ref op) == 0 && !op.fAnyOperationsAborted;
+        }
+        else
+        {
+            var op = new SHFILEOPSTRUCT32 { wFunc = FO_DELETE, pFrom = from, fFlags = flags };
+            return SHFileOperation32(ref op) == 0 && !op.fAnyOperationsAborted;
+        }
     }
 
     // ── 휴지통 비우기 ────────────────────────────────────────────────────
@@ -189,14 +211,76 @@ public static class ShellInterop
                 return null;
             try
             {
-                var img = Imaging.CreateBitmapSourceFromHBitmap(hBitmap, IntPtr.Zero, Int32Rect.Empty,
-                    BitmapSizeOptions.FromEmptyOptions());
-                img.Freeze();
+                var img = BitmapFromHBitmapPreservingAlpha(hBitmap);
+                if (img is { CanFreeze: true }) img.Freeze();
                 return img;
             }
             finally { DeleteObject(hBitmap); }
         }
         catch { return null; }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BITMAP
+    {
+        public int bmType, bmWidth, bmHeight, bmWidthBytes;
+        public ushort bmPlanes, bmBitsPixel;
+        public IntPtr bmBits;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BITMAPINFOHEADER
+    {
+        public int biSize, biWidth, biHeight;
+        public ushort biPlanes, biBitCount;
+        public uint biCompression, biSizeImage;
+        public int biXPelsPerMeter, biYPelsPerMeter;
+        public uint biClrUsed, biClrImportant;
+    }
+
+    [DllImport("gdi32.dll")]
+    private static extern int GetObject(IntPtr hObject, int nCount, ref BITMAP lpObject);
+
+    [DllImport("gdi32.dll")]
+    private static extern int GetDIBits(IntPtr hdc, IntPtr hBitmap, uint start, uint lines,
+        byte[]? bits, ref BITMAPINFOHEADER bmi, uint usage);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetDC(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern int ReleaseDC(IntPtr hWnd, IntPtr hdc);
+
+    /// <summary>CreateBitmapSourceFromHBitmap은 알파를 버려 투명 썸네일이 검게 나온다 —
+    /// 32bpp면 GetDIBits(음수 높이 = 톱다운 강제)로 프리멀티플라이드 BGRA를 직접 복사.</summary>
+    private static ImageSource? BitmapFromHBitmapPreservingAlpha(IntPtr hBitmap)
+    {
+        var bmp = new BITMAP();
+        if (GetObject(hBitmap, Marshal.SizeOf<BITMAP>(), ref bmp) != 0
+            && bmp.bmBitsPixel == 32 && bmp.bmHeight > 0 && bmp.bmWidth > 0)
+        {
+            var hdc = GetDC(IntPtr.Zero);
+            try
+            {
+                var stride = bmp.bmWidth * 4;
+                var buffer = new byte[(long)stride * bmp.bmHeight];
+                var bmi = new BITMAPINFOHEADER
+                {
+                    biSize = Marshal.SizeOf<BITMAPINFOHEADER>(),
+                    biWidth = bmp.bmWidth,
+                    biHeight = -bmp.bmHeight,   // 음수 = 톱다운
+                    biPlanes = 1,
+                    biBitCount = 32,
+                    biCompression = 0,          // BI_RGB
+                };
+                if (GetDIBits(hdc, hBitmap, 0, (uint)bmp.bmHeight, buffer, ref bmi, 0) != 0)
+                    return BitmapSource.Create(bmp.bmWidth, bmp.bmHeight, 96, 96,
+                        PixelFormats.Pbgra32, null, buffer, stride);
+            }
+            finally { ReleaseDC(IntPtr.Zero, hdc); }
+        }
+        return Imaging.CreateBitmapSourceFromHBitmap(hBitmap, IntPtr.Zero, Int32Rect.Empty,
+            BitmapSizeOptions.FromEmptyOptions());
     }
 
     // ── 탐색기에서 보기 (Finder에서 보기 대응) ───────────────────────────

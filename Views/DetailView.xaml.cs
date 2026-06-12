@@ -105,6 +105,7 @@ public partial class DetailView : UserControl, INotifyPropertyChanged
                 UpdateRowVisuals();
                 break;
             case nameof(AppModel.StatusFreeSpace):
+            case nameof(AppModel.InternalClipboard):
                 RefreshStatus();
                 break;
         }
@@ -200,7 +201,7 @@ public partial class DetailView : UserControl, INotifyPropertyChanged
     {
         var s = _model?.ListScale ?? 1.0;
         IconColWidth = 18 * s;
-        IconSize = 16 * s;
+        IconSize = 18 * s;   // 스펙 03 §2.3 — 행 아이콘 18×s
         RowHeight = 22 * s;
         NameFontSize = 12 * s;
         MetaFontSize = 11 * s;
@@ -330,18 +331,21 @@ public partial class DetailView : UserControl, INotifyPropertyChanged
             Focusable = false,
             Template = HandleTemplate(),
         };
-        double baseWidth = 0, cum = 0;
+        // HorizontalChange는 '썸 로컬 기준 오프셋'이라 누적하면 클램프(44/360)에 걸린 뒤 폭주한다 —
+        // 고정 조상(this) 기준 시작점 대비 총 이동거리로 매 이벤트 멱등 계산 (스펙 2.2 의미론).
+        double baseWidth = 0;
+        Point dragOrigin = default;
         thumb.DragStarted += (_, _) =>
         {
             baseWidth = _model?.ColumnWidth(col) ?? col.DefaultWidth();
-            cum = 0;
+            dragOrigin = Mouse.GetPosition(this);
         };
-        thumb.DragDelta += (_, e) =>
+        thumb.DragDelta += (_, _) =>
         {
             if (_model is null) return;
-            cum += e.HorizontalChange;
             var s = Math.Max(_model.ListScale, 0.01);
-            _model.SetColumnWidth(col, baseWidth - cum / s);
+            var dx = Mouse.GetPosition(this).X - dragOrigin.X;
+            _model.SetColumnWidth(col, baseWidth - dx / s);
         };
         thumb.MouseDoubleClick += (_, e) =>
         {
@@ -551,7 +555,11 @@ public partial class DetailView : UserControl, INotifyPropertyChanged
         }
     }
 
-    private void ListScroll_ScrollChanged(object sender, ScrollChangedEventArgs e) => MaybeLoadMoreVisible();
+    private void ListScroll_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        MaybeLoadMoreVisible();
+        if (ReferenceEquals(sender, IconScroll)) ScheduleThumbQueue();
+    }
 
     /// <summary>typeMode 무한 스크롤 — 마지막 가시 인덱스를 모델에 알림 (스펙 §8).</summary>
     private void MaybeLoadMoreVisible()
@@ -671,6 +679,9 @@ public partial class DetailView : UserControl, INotifyPropertyChanged
             if (urls.Count > 0)
             {
                 var data = new DataObject(DataFormats.FileDrop, urls.ToArray());
+                // 외부 앱 드롭 기본을 복사로 유도 — 원본이 사라지지 않게 (스펙 03 §3.5/§10)
+                data.SetData("Preferred DropEffect",
+                    new MemoryStream(BitConverter.GetBytes((int)DragDropEffects.Copy)), false);
                 try { DragDrop.DoDragDrop(capture, data, DragDropEffects.Copy | DragDropEffects.Move); }
                 catch { /* 드래그 실패는 무시 */ }
             }
@@ -776,6 +787,8 @@ public partial class DetailView : UserControl, INotifyPropertyChanged
         var menu = new ContextMenu();
 
         menu.Items.Add(Mi("열기", () => model.Open(item)));
+        if (!item.IsParent && !isFolder)
+            menu.Items.Add(BuildOpenWithMenu(item));
         if (isFolder)
             menu.Items.Add(Mi("새 탭에서 열기", () => model.NewTab(item.Path), "Ctrl+T"));
         if (pane.IsVirtualMode)
@@ -821,6 +834,30 @@ public partial class DetailView : UserControl, INotifyPropertyChanged
         del.Foreground = DestructiveRed;
         menu.Items.Add(del);
         return menu;
+    }
+
+    /// <summary>"다음으로 열기" 서브메뉴 — SHAssocEnumHandlers는 느려서 SubmenuOpened에서 lazy 채움 (스펙 5.3).</summary>
+    private MenuItem BuildOpenWithMenu(FileItem item)
+    {
+        var openWith = new MenuItem { Header = "다음으로 열기" };
+        openWith.Items.Add(new MenuItem { Header = "(불러오는 중…)", IsEnabled = false });
+        var loaded = false;
+        openWith.SubmenuOpened += (_, _) =>
+        {
+            if (loaded) return;
+            loaded = true;
+            openWith.Items.Clear();
+            var targets = ContextTargetPaths(item);
+            var handlers = OpenWithService.EnumHandlers(Path.GetExtension(item.Path));
+            if (handlers.Count == 0)
+                openWith.Items.Add(new MenuItem { Header = "열 수 있는 앱 없음", IsEnabled = false });
+            else
+                foreach (var h in handlers)
+                    openWith.Items.Add(Mi(h.Name, () => { foreach (var p in targets) h.Invoke(p); }));
+            openWith.Items.Add(new Separator());
+            openWith.Items.Add(Mi("기타…", () => OpenWithService.ShowOpenWithDialog(item.Path)));
+        };
+        return openWith;
     }
 
     /// <summary>태그 서브메뉴 — 7색 토글 + 태그 모두 제거. 렌더 시 상태를 읽지 않음 (스펙 5.4).</summary>
@@ -1074,13 +1111,40 @@ public partial class DetailView : UserControl, INotifyPropertyChanged
         _model.DropFiles(paths, _model.Detail.Directory, copy: IsCopyDrop(e));
     }
 
-    // ── 아이콘 보기 썸네일 (셀 실현 시 비동기 로드, 동시 2건 제한) ───────
+    // ── 아이콘 보기 썸네일 (가시 범위만 비동기 로드, 동시 2건 제한) ───────
 
     private static readonly SemaphoreSlim ThumbGate = new(2, 2);
+    private bool _thumbQueuePending;
 
-    private void IconCell_Loaded(object sender, RoutedEventArgs e)
+    /// <summary>셀 Loaded/스크롤마다 호출 — 디스패처 1회로 합쳐 가시 범위만 큐잉.</summary>
+    private void ScheduleThumbQueue()
     {
-        if (sender is not FrameworkElement fe || fe.DataContext is not DetailRow row) return;
+        if (_thumbQueuePending) return;
+        _thumbQueuePending = true;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            _thumbQueuePending = false;
+            QueueVisibleIconThumbs();
+        }), DispatcherPriority.Background);
+    }
+
+    /// <summary>가시 범위(±2행 버퍼)의 셀만 썸네일 요청 — 초대형 폴더에서 전수 로드 방지 (스펙 §2.4 완화).</summary>
+    private void QueueVisibleIconThumbs()
+    {
+        if (_model is null || _model.Detail.ViewMode != ViewMode.Icon) return;
+        if (IconHost.ItemsSource is not IReadOnlyList<DetailRow> rows || rows.Count == 0) return;
+        var pitch = CellSize + 8;
+        var perRow = Math.Max(1, (int)((Math.Max(IconScroll.ViewportWidth, pitch) - 24) / pitch));
+        var firstLine = Math.Max(0, (int)(IconScroll.VerticalOffset / pitch) - 2);
+        var lastLine = (int)((IconScroll.VerticalOffset + Math.Max(IconScroll.ViewportHeight, pitch)) / pitch) + 2;
+        var lo = Math.Max(0, firstLine * perRow);
+        var hi = Math.Min(rows.Count - 1, (lastLine + 1) * perRow - 1);
+        for (int i = lo; i <= hi; i++)
+            RequestThumb(rows[i]);
+    }
+
+    private void RequestThumb(DetailRow row)
+    {
         if (row.IsHeader || row.Item is null || row.ThumbRequested) return;
         row.ThumbRequested = true;
         var item = row.Item;
@@ -1097,6 +1161,8 @@ public partial class DetailView : UserControl, INotifyPropertyChanged
             dispatcher.BeginInvoke(new Action(() => row.Thumb = thumb));
         });
     }
+
+    private void IconCell_Loaded(object sender, RoutedEventArgs e) => ScheduleThumbQueue();
 }
 
 // ── 행 데이터 (목록/아이콘 공용) ─────────────────────────────────────────

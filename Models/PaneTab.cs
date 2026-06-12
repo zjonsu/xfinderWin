@@ -135,8 +135,8 @@ public sealed class PaneTab : ObservableObject
         Items = sorted;
         RebuildGroups();   // 그룹화가 켜져 있으면 Items를 그룹 순서로 재배열 + 구간 계산
 
-        // 커서 유효성 유지.
-        if (Cursor is not null && !Items.Any(i => i.Path == Cursor))
+        // 커서 유효성 유지 (NTFS 대소문자 무시 비교).
+        if (Cursor is not null && !Items.Any(i => string.Equals(i.Path, Cursor, StringComparison.OrdinalIgnoreCase)))
             Cursor = Items.FirstOrDefault()?.Path;
         else if (Cursor is null)
             Cursor = Items.FirstOrDefault()?.Path;
@@ -191,9 +191,9 @@ public sealed class PaneTab : ObservableObject
             case GroupKey.None:
                 return (0, "");
             case GroupKey.Name:
-                // 첫 글자 기준 (한글은 음절 그대로, 영문은 대문자 통일).
+                // 첫 글자 기준 (한글은 음절 그대로, 영문은 대문자 통일; 이모지 등 서러게이트 쌍 보존).
                 if (item.Name.Length == 0) return (1, "#");
-                return (0, item.Name[..1].ToUpperInvariant());
+                return (0, System.Globalization.StringInfo.GetNextTextElement(item.Name).ToUpperInvariant());
             case GroupKey.Kind:
                 if (item.IsDirectory && !item.IsBundle) return (0, "폴더");
                 return (1, Format.KindLabel(item));
@@ -235,7 +235,7 @@ public sealed class PaneTab : ObservableObject
         if (marked.Count > 0) return marked;
         if (Cursor is not null)
         {
-            var item = Items.FirstOrDefault(i => i.Path == Cursor);
+            var item = Items.FirstOrDefault(i => string.Equals(i.Path, Cursor, StringComparison.OrdinalIgnoreCase));
             if (item is not null && !item.IsParent) return new List<FileItem> { item };
         }
         return new List<FileItem>();
