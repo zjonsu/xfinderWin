@@ -1,0 +1,462 @@
+<!-- mac 대응: Sources/XFinder/Views/SettingsWindow.swift + RootView.swift SettingsView(501~784행) — 설정 단독 창 (스펙 04 §10, 02 §8, 08 §2.4/§2.6) -->
+<Window x:Class="XFinder.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="설정" Width="520" Height="620"
+        ResizeMode="CanMinimize"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+
+    <Window.Resources>
+        <!-- accent @ 0.14 — 탭/세그먼트 선택 배경 -->
+        <SolidColorBrush x:Key="AccentFaintBrush" Color="{DynamicResource AccentColor}" Opacity="0.14"/>
+
+        <!-- 상단 카테고리 탭 버튼: 폭 74, 아이콘 19 + 라벨 11, 코너 9 -->
+        <Style x:Key="SettingsTabButton" TargetType="ToggleButton">
+            <Setter Property="Width" Value="74"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bg" CornerRadius="9" Background="Transparent" Padding="0,9">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource AccentFaintBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 세그먼트 컨트롤 조각 (ToggleButton 그룹으로 직접 구성) -->
+        <Style x:Key="SegmentButton" TargetType="ToggleButton">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bg" CornerRadius="6" Background="Transparent" Padding="11,4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource AccentFaintBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 일반 작은 버튼 -->
+        <Style x:Key="SettingsButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" CornerRadius="6"
+                                Background="{DynamicResource ControlFillBrush}"
+                                BorderBrush="{DynamicResource ControlStrokeBrush}" BorderThickness="1"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource ControlFillHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 파괴적(빨간 톤) 버튼 -->
+        <Style x:Key="DestructiveButton" TargetType="Button" BasedOn="{StaticResource SettingsButton}">
+            <Setter Property="Foreground" Value="#FFE8453A"/>
+        </Style>
+
+        <!-- 섹션 라벨: 아이콘 + 제목 13 semibold secondary -->
+        <Style x:Key="SectionIcon" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource IconFontFamily}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+        </Style>
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- 힌트: 11pt secondary -->
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <!-- 테마 인지 체크박스 -->
+        <Style x:Key="SettingsCheck" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal" Background="Transparent">
+                            <Border x:Name="Box" Width="15" Height="15" CornerRadius="4"
+                                    Background="{DynamicResource TextBackgroundBrush}"
+                                    BorderBrush="{DynamicResource ControlStrokeBrush}" BorderThickness="1"
+                                    VerticalAlignment="Center">
+                                <TextBlock x:Name="Check" Text="&#xE73E;"
+                                           FontFamily="{StaticResource IconFontFamily}" FontSize="9"
+                                           Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Visibility="Collapsed"/>
+                            </Border>
+                            <ContentPresenter Margin="7,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Box" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 둥근 입력 필드 -->
+        <Style x:Key="FieldBox" TargetType="TextBox">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource TextBackgroundBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="9,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border CornerRadius="6" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="FieldPasswordBox" TargetType="PasswordBox">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource TextBackgroundBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="9,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="PasswordBox">
+                        <Border CornerRadius="6" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 입력 필드 placeholder -->
+        <Style x:Key="Placeholder" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="10,0,0,0"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ── 상단 카테고리 탭 바 ── -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="16,16,16,10">
+            <ToggleButton x:Name="TabGeneral" Style="{StaticResource SettingsTabButton}" Margin="0,0,8,0" Click="OnTabGeneral">
+                <StackPanel>
+                    <TextBlock x:Name="TabGeneralIcon" FontFamily="{StaticResource IconFontFamily}" FontSize="19" HorizontalAlignment="Center"/>
+                    <TextBlock Text="일반" FontSize="11" FontWeight="Medium" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                </StackPanel>
+            </ToggleButton>
+            <ToggleButton x:Name="TabDisplay" Style="{StaticResource SettingsTabButton}" Margin="0,0,8,0" Click="OnTabDisplay">
+                <StackPanel>
+                    <TextBlock x:Name="TabDisplayIcon" FontFamily="{StaticResource IconFontFamily}" FontSize="19" HorizontalAlignment="Center"/>
+                    <TextBlock Text="보기" FontSize="11" FontWeight="Medium" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                </StackPanel>
+            </ToggleButton>
+            <ToggleButton x:Name="TabAi" Style="{StaticResource SettingsTabButton}" Click="OnTabAi">
+                <StackPanel>
+                    <TextBlock x:Name="TabAiIcon" FontFamily="{StaticResource IconFontFamily}" FontSize="19" HorizontalAlignment="Center"/>
+                    <TextBlock Text="AI" FontSize="11" FontWeight="Medium" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                </StackPanel>
+            </ToggleButton>
+        </StackPanel>
+
+        <Border Grid.Row="1" Height="1" Background="{DynamicResource DividerBrush}"/>
+
+        <!-- ── 스크롤 콘텐츠 ── -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <Grid Margin="28,24">
+
+                <!-- ════ 일반 ════ -->
+                <StackPanel x:Name="PanelGeneral">
+
+                    <!-- 화면 모드 -->
+                    <StackPanel Margin="0,0,0,22">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock x:Name="IconAppearance" Style="{StaticResource SectionIcon}"/>
+                            <TextBlock Text="화면 모드" Style="{StaticResource SectionTitle}"/>
+                        </StackPanel>
+                        <Border Background="{DynamicResource ControlFillBrush}" CornerRadius="8" Padding="2"
+                                HorizontalAlignment="Left" Margin="0,0,0,6">
+                            <StackPanel Orientation="Horizontal">
+                                <ToggleButton x:Name="SegSystem" Content="시스템" Style="{StaticResource SegmentButton}" Click="OnSegAppearance"/>
+                                <ToggleButton x:Name="SegLight" Content="라이트" Style="{StaticResource SegmentButton}" Click="OnSegAppearance"/>
+                                <ToggleButton x:Name="SegDark" Content="다크" Style="{StaticResource SegmentButton}" Click="OnSegAppearance"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="시스템: Windows 설정을 따릅니다." Style="{StaticResource Hint}"/>
+                    </StackPanel>
+
+                    <!-- 터미널 앱 -->
+                    <StackPanel Margin="0,0,0,22">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock x:Name="IconTerminal" Style="{StaticResource SectionIcon}"/>
+                            <TextBlock Text="터미널 앱" Style="{StaticResource SectionTitle}"/>
+                        </StackPanel>
+                        <Border Background="{DynamicResource ControlFillBrush}" CornerRadius="8" Padding="2"
+                                HorizontalAlignment="Left" Margin="0,0,0,6">
+                            <StackPanel Orientation="Horizontal">
+                                <ToggleButton x:Name="SegTermAuto" Content="자동" Style="{StaticResource SegmentButton}" Click="OnSegTerminal"/>
+                                <ToggleButton x:Name="SegTermWt" Content="Windows Terminal" Style="{StaticResource SegmentButton}" Click="OnSegTerminal"/>
+                                <ToggleButton x:Name="SegTermPs" Content="PowerShell" Style="{StaticResource SegmentButton}" Click="OnSegTerminal"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock x:Name="HintTerminal" Style="{StaticResource Hint}"/>
+                    </StackPanel>
+
+                    <!-- 기본 탭 -->
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock x:Name="IconDefaultTabs" Style="{StaticResource SectionIcon}"/>
+                            <TextBlock Text="기본 탭" Style="{StaticResource SectionTitle}"/>
+                        </StackPanel>
+                        <TextBlock x:Name="DefaultTabsList" FontSize="12" Foreground="{DynamicResource TextPrimaryBrush}"
+                                   TextWrapping="Wrap" MaxHeight="36" Visibility="Collapsed" Margin="0,0,0,6"/>
+                        <TextBlock x:Name="HintDefaultTabs" Style="{StaticResource Hint}" Margin="0,0,0,8"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="BtnSaveTabs" Content="현재 열린 탭을 기본으로 저장"
+                                    Style="{StaticResource SettingsButton}" Margin="0,0,8,0" Click="OnSaveTabs"/>
+                            <Button x:Name="BtnClearTabs" Content="지우기" Style="{StaticResource DestructiveButton}"
+                                    Visibility="Collapsed" Click="OnClearTabs"
+                                    ToolTip="저장된 기본 탭을 삭제하고 기본 동작(최근 항목)으로 되돌립니다"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- ════ 보기 ════ -->
+                <StackPanel x:Name="PanelDisplay" Visibility="Collapsed">
+
+                    <!-- 파일 목록 크기 -->
+                    <StackPanel Margin="0,0,0,22">
+                        <DockPanel Margin="0,0,0,6">
+                            <TextBlock x:Name="ListScaleValue" DockPanel.Dock="Right" FontSize="11" FontWeight="Medium"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="IconListScale" Style="{StaticResource SectionIcon}"/>
+                                <TextBlock Text="파일 목록 크기" Style="{StaticResource SectionTitle}"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <DockPanel>
+                            <Button x:Name="BtnScaleMinus" DockPanel.Dock="Left" Style="{StaticResource IconButton}"
+                                    Width="22" Height="22" ToolTip="5% 작게" Click="OnScaleMinus"/>
+                            <Button x:Name="BtnScalePlus" DockPanel.Dock="Right" Style="{StaticResource IconButton}"
+                                    Width="22" Height="22" ToolTip="5% 크게" Click="OnScalePlus"/>
+                            <Slider x:Name="ScaleSlider" Minimum="0.8" Maximum="1.8"
+                                    TickFrequency="0.05" IsSnapToTickEnabled="True"
+                                    VerticalAlignment="Center" Margin="6,0" ValueChanged="OnScaleSlider"/>
+                        </DockPanel>
+                    </StackPanel>
+
+                    <!-- 날짜 표시 -->
+                    <StackPanel Margin="0,0,0,22">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock x:Name="IconDateStyle" Style="{StaticResource SectionIcon}"/>
+                            <TextBlock Text="날짜 표시" Style="{StaticResource SectionTitle}"/>
+                        </StackPanel>
+                        <Border Background="{DynamicResource ControlFillBrush}" CornerRadius="8" Padding="2"
+                                HorizontalAlignment="Left" Margin="0,0,0,6">
+                            <StackPanel Orientation="Horizontal">
+                                <ToggleButton x:Name="SegDateAbsolute" Content="실제 날짜" Style="{StaticResource SegmentButton}" Click="OnSegDate"/>
+                                <ToggleButton x:Name="SegDateRelative" Content="상대 시간" Style="{StaticResource SegmentButton}" Click="OnSegDate"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock x:Name="HintDate" Style="{StaticResource Hint}"/>
+                    </StackPanel>
+
+                    <!-- 검색창 위치 -->
+                    <StackPanel Margin="0,0,0,22">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock x:Name="IconSearchPos" Style="{StaticResource SectionIcon}"/>
+                            <TextBlock Text="검색창 위치" Style="{StaticResource SectionTitle}"/>
+                        </StackPanel>
+                        <Border Background="{DynamicResource ControlFillBrush}" CornerRadius="8" Padding="2"
+                                HorizontalAlignment="Left" Margin="0,0,0,6">
+                            <StackPanel Orientation="Horizontal">
+                                <ToggleButton x:Name="SegSearchToolbar" Content="툴바" Style="{StaticResource SegmentButton}" Click="OnSegSearch"/>
+                                <ToggleButton x:Name="SegSearchBelow" Content="툴바 아래" Style="{StaticResource SegmentButton}" Click="OnSegSearch"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock x:Name="HintSearchPos" Style="{StaticResource Hint}"/>
+                    </StackPanel>
+
+                    <!-- 폴더 용량 계산 -->
+                    <StackPanel Margin="0,0,0,22">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock x:Name="IconCalcSizes" Style="{StaticResource SectionIcon}"/>
+                            <TextBlock Text="폴더 용량 계산" Style="{StaticResource SectionTitle}"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkCalcSizes" Content="폴더 용량 계산 및 표시"
+                                  Style="{StaticResource SettingsCheck}" Margin="0,0,0,6" Click="OnCalcToggled"/>
+                        <TextBlock Text="끄면 파인더처럼 폴더 용량을 계산하지 않아 탐색이 빠릅니다(폴더는 -- 로 표시)."
+                                   Style="{StaticResource Hint}"/>
+                    </StackPanel>
+
+                    <!-- 최근 항목 표시 종류 -->
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock x:Name="IconRecents" Style="{StaticResource SectionIcon}"/>
+                            <TextBlock Text="최근 항목 표시 종류" Style="{StaticResource SectionTitle}"/>
+                        </StackPanel>
+                        <WrapPanel x:Name="RecentsPanel" ItemWidth="110"/>
+                        <TextBlock Text="선택한 종류만 최근 항목에 표시 (아무것도 선택 안 하면 전체)."
+                                   Style="{StaticResource Hint}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- ════ AI ════ -->
+                <StackPanel x:Name="PanelAi" Visibility="Collapsed">
+
+                    <!-- AI 모델 -->
+                    <StackPanel Margin="0,0,0,22">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock x:Name="IconAiModel" Style="{StaticResource SectionIcon}"/>
+                            <TextBlock Text="AI 모델" Style="{StaticResource SectionTitle}"/>
+                        </StackPanel>
+                        <Border Background="{DynamicResource ControlFillBrush}" CornerRadius="8" Padding="2"
+                                HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal">
+                                <ToggleButton x:Name="SegAiOllama" Content="로컬 (Ollama)" Style="{StaticResource SegmentButton}" Click="OnSegAiProvider"/>
+                                <ToggleButton x:Name="SegAiGemini" Content="Gemini" Style="{StaticResource SegmentButton}" Click="OnSegAiProvider"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Gemini -->
+                        <StackPanel x:Name="GeminiPanel" Margin="0,10,0,0">
+                            <Grid Margin="0,0,0,6">
+                                <PasswordBox x:Name="GeminiKeyBox" Style="{StaticResource FieldPasswordBox}"
+                                             PasswordChanged="OnGeminiKeyChanged"/>
+                                <TextBlock x:Name="GeminiKeyPlaceholder" Text="Gemini API 키" Style="{StaticResource Placeholder}"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,6">
+                                <TextBox x:Name="GeminiModelBox" Style="{StaticResource FieldBox}"
+                                         TextChanged="OnGeminiModelChanged"/>
+                                <TextBlock x:Name="GeminiModelPlaceholder" Text="모델 (예: gemini-2.5-flash)" Style="{StaticResource Placeholder}"/>
+                            </Grid>
+                            <TextBlock Text="키는 aistudio.google.com 에서 발급합니다. 정리 시 파일 이름이 구글로 전송됩니다."
+                                       Style="{StaticResource Hint}"/>
+                        </StackPanel>
+
+                        <!-- Ollama -->
+                        <StackPanel x:Name="OllamaPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                            <TextBlock Text="서버 주소" Style="{StaticResource Hint}" Margin="0,0,0,3"/>
+                            <Grid Margin="0,0,0,6">
+                                <TextBox x:Name="OllamaUrlBox" Style="{StaticResource FieldBox}" FontFamily="Consolas"
+                                         TextChanged="OnOllamaUrlChanged"/>
+                                <TextBlock x:Name="OllamaUrlPlaceholder" Text="http://localhost:11434"
+                                           Style="{StaticResource Placeholder}" FontFamily="Consolas"/>
+                            </Grid>
+                            <TextBlock Text="모델 이름" Style="{StaticResource Hint}" Margin="0,0,0,3"/>
+                            <DockPanel Margin="0,0,0,6">
+                                <Button x:Name="BtnOllamaDefaults" DockPanel.Dock="Right" Content="기본값"
+                                        Style="{StaticResource SettingsButton}" Margin="8,0,0,0" Click="OnOllamaDefaults"/>
+                                <Grid>
+                                    <TextBox x:Name="OllamaModelBox" Style="{StaticResource FieldBox}" FontFamily="Consolas"
+                                             TextChanged="OnOllamaModelChanged"/>
+                                    <TextBlock x:Name="OllamaModelPlaceholder" Text="gemma4:latest"
+                                               Style="{StaticResource Placeholder}" FontFamily="Consolas"/>
+                                </Grid>
+                            </DockPanel>
+                            <TextBlock Text="로컬 Ollama 사용 — 입력한 모델이 없으면 자동 감지. 데이터가 기기 밖으로 나가지 않습니다."
+                                       Style="{StaticResource Hint}"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- AI 정리 예외 폴더 -->
+                    <StackPanel>
+                        <DockPanel Margin="0,0,0,6">
+                            <TextBlock x:Name="ExcludedCount" DockPanel.Dock="Right" FontSize="11" FontWeight="Medium"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="IconExcluded" Style="{StaticResource SectionIcon}"/>
+                                <TextBlock Text="AI 정리 예외 폴더" Style="{StaticResource SectionTitle}"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <TextBlock x:Name="ExcludedEmptyHint"
+                                   Text="등록된 예외 폴더가 없습니다. 폴더를 우클릭해 ‘AI 정리 예외 폴더로 등록’을 선택하세요."
+                                   Style="{StaticResource Hint}"/>
+                        <ScrollViewer x:Name="ExcludedScroll" MaxHeight="132" VerticalScrollBarVisibility="Auto"
+                                      Visibility="Collapsed" Margin="0,0,0,6">
+                            <StackPanel x:Name="ExcludedList"/>
+                        </ScrollViewer>
+                        <TextBlock x:Name="ExcludedHint"
+                                   Text="등록된 폴더와 그 하위 폴더 전체에서 AI 정리가 동작하지 않습니다."
+                                   Style="{StaticResource Hint}" Visibility="Collapsed"/>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</Window>

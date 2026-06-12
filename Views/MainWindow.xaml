@@ -1,0 +1,228 @@
+<Window x:Class="XFinder.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:views="clr-namespace:XFinder.Views"
+        Title="XFinder" Width="1080" Height="680" MinWidth="760" MinHeight="460"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True"
+        WindowStartupLocation="CenterScreen">
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="44" ResizeBorderThickness="6"
+                            GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
+    </shell:WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <views:BoolToVisibilityConverter x:Key="BoolToVis"/>
+        <views:NullToVisibilityConverter x:Key="NullToVis"/>
+    </Window.Resources>
+
+    <Grid x:Name="RootGrid">
+        <!-- ── 본문 레이어 ─────────────────────────────────────────── -->
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="44"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- 타이틀바 겸 툴바 (unified) -->
+            <Border Grid.Row="0" Background="{DynamicResource SidebarBackgroundBrush}"
+                    BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1">
+                <DockPanel LastChildFill="True">
+                    <!-- 오른쪽: 캡션 버튼 -->
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top"
+                                shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                        <Button x:Name="BtnMin" Style="{StaticResource CaptionButton}" Content="&#xE921;" Click="OnMinimize"/>
+                        <Button x:Name="BtnMax" Style="{StaticResource CaptionButton}" Content="&#xE922;" Click="OnMaximize"/>
+                        <Button x:Name="BtnClose" Style="{StaticResource CaptionCloseButton}" Content="&#xE8BB;" Click="OnCloseWindow"/>
+                    </StackPanel>
+
+                    <!-- 오른쪽: 검색창 (툴바 위치일 때) -->
+                    <Border DockPanel.Dock="Right" x:Name="ToolbarSearchHost" Margin="0,0,18,0"
+                            VerticalAlignment="Center" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                        <TextBox x:Name="ToolbarSearchBox" Style="{StaticResource SearchBox}" Width="170"
+                                 ToolTip="이름으로 검색 — 현재 폴더(하위 폴더 포함)에서 걸러냅니다"
+                                 TextChanged="OnSearchTextChanged"/>
+                    </Border>
+
+                    <!-- 오른쪽: 보기/그룹/새폴더/작업/숨김 -->
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center"
+                                Margin="0,0,10,0" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                        <Button x:Name="BtnViewMode" Style="{StaticResource IconButton}" Click="OnToggleViewMode"/>
+                        <Button x:Name="BtnGroup" Style="{StaticResource IconButton}" Click="OnGroupMenu"
+                                ToolTip="다음으로 그룹화 — 이름·종류·크기·수정일·생성일 구간으로 묶어 보기"/>
+                        <Button x:Name="BtnNewFolder" Style="{StaticResource IconButton}" Click="OnNewFolder"
+                                ToolTip="현재 위치에 새 폴더 만들기 (Ctrl+Shift+N)"/>
+                        <Button x:Name="BtnActions" Style="{StaticResource IconButton}" FontSize="14" Click="OnActionMenu"
+                                ToolTip="작업 — 열기·복사·이동·압축·이름 변경 등"/>
+                        <Button x:Name="BtnHidden" Style="{StaticResource IconButton}" Click="OnToggleHidden"/>
+                    </StackPanel>
+
+                    <!-- 왼쪽: 시스템 상태 + 탐색 + 위치 동작 -->
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0"
+                                shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                        <views:SystemStatsView x:Name="SystemStats" VerticalAlignment="Center"/>
+                        <Rectangle Width="1" Height="16" RadiusX="0.5" RadiusY="0.5" Margin="5,0"
+                                   Fill="{DynamicResource TextSecondaryBrush}" Opacity="0.25"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="BtnBack" Style="{StaticResource NavButton}" Margin="0,0,2,0"
+                                    Content="&#xE76B;" ToolTip="뒤로 — 이전 폴더로 이동 (Alt+←)" Click="OnGoBack"/>
+                            <Button x:Name="BtnForward" Style="{StaticResource NavButton}" Margin="0,0,2,0"
+                                    Content="&#xE76C;" ToolTip="앞으로 — 다음 폴더로 이동 (Alt+→)" Click="OnGoForward"/>
+                            <Button x:Name="BtnUp" Style="{StaticResource NavButton}"
+                                    Content="&#xE70E;" ToolTip="상위 폴더로 이동 (Alt+↑)" Click="OnGoUp"/>
+                        </StackPanel>
+                        <Rectangle Width="10"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="BtnTerminal" Style="{StaticResource NavButton}" Margin="0,0,2,0"
+                                    Content="&#xE756;" ToolTip="현재 폴더를 터미널에서 열기" Click="OnOpenTerminal"/>
+                            <Button x:Name="BtnHangul" Style="{StaticResource NavButton}" Width="34" Margin="0,0,2,0"
+                                    FontFamily="Segoe UI" FontSize="12" Content="가나"
+                                    ToolTip="한글 자소 분리(NFD) 파일명 복원 — 클릭: 이 폴더 / 우클릭: 하위 폴더까지"
+                                    Click="OnHangulFix" MouseRightButtonUp="OnHangulMenu"/>
+                            <Button x:Name="BtnAI" Style="{StaticResource NavButton}"
+                                    FontFamily="Segoe UI Emoji" Content="✨" Click="OnAIOrganize"/>
+                        </StackPanel>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <!-- 콘텐츠: 사이드바 + 상세 -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="SidebarColumn" Width="215" MinWidth="180" MaxWidth="340"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*" MinWidth="480"/>
+                </Grid.ColumnDefinitions>
+
+                <views:SidebarView x:Name="Sidebar" Grid.Column="0"/>
+
+                <GridSplitter Grid.Column="1" Width="1" HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                              Background="{DynamicResource DividerBrush}" Focusable="False"/>
+
+                <Grid Grid.Column="2" Background="{DynamicResource WindowBackgroundBrush}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>   <!-- 탭 바 -->
+                        <RowDefinition Height="Auto"/>   <!-- 검색 줄 (below) -->
+                        <RowDefinition Height="Auto"/>   <!-- 경로 막대 -->
+                        <RowDefinition Height="Auto"/>   <!-- 구분선 -->
+                        <RowDefinition Height="*"/>      <!-- 목록 -->
+                    </Grid.RowDefinitions>
+
+                    <!-- 탭 바 (2개 이상일 때만) -->
+                    <StackPanel Grid.Row="0" x:Name="TabBarHost" Visibility="Collapsed">
+                        <Grid Margin="6,3">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <UniformGrid x:Name="TabStrip" Rows="1"/>
+                            <Button Grid.Column="1" x:Name="BtnNewTab" Width="26" Height="22" Margin="4,0,0,0"
+                                    Style="{StaticResource IconButton}" FontSize="11" FontWeight="SemiBold"
+                                    Foreground="{DynamicResource TextSecondaryBrush}"
+                                    Content="&#xE710;" ToolTip="새 탭 (Ctrl+T)" Click="OnNewTab"/>
+                        </Grid>
+                        <Rectangle Height="1" Fill="{DynamicResource DividerBrush}"/>
+                    </StackPanel>
+
+                    <!-- 검색 줄 (설정: 툴바 아래) -->
+                    <StackPanel Grid.Row="1" x:Name="SearchRowHost" Visibility="Collapsed"
+                                Background="{DynamicResource WindowBackgroundBrush}">
+                        <Border Margin="10,6" Padding="9,5" CornerRadius="7"
+                                Background="{DynamicResource TextBackgroundBrush}"
+                                BorderBrush="{DynamicResource ControlStrokeBrush}" BorderThickness="1"
+                                ToolTip="이름으로 검색 — 현재 폴더(하위 폴더 포함)에서 걸러냅니다">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Left" Text="&#xE721;" FontFamily="{StaticResource IconFontFamily}"
+                                           FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}"
+                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <Button DockPanel.Dock="Right" x:Name="BtnClearSearch" Width="18" Height="18"
+                                        Style="{StaticResource IconButton}" FontSize="12"
+                                        Foreground="{DynamicResource TextSecondaryBrush}" Content="&#xE711;"
+                                        ToolTip="검색어 지우기" Visibility="Collapsed" Click="OnClearSearch"/>
+                                <TextBox x:Name="BelowSearchBox" Style="{StaticResource PlainTextBox}" FontSize="13"
+                                         TextChanged="OnSearchTextChanged"/>
+                            </DockPanel>
+                        </Border>
+                        <Rectangle Height="1" Fill="{DynamicResource DividerBrush}"/>
+                    </StackPanel>
+
+                    <!-- 경로 막대 -->
+                    <Border Grid.Row="2" Background="{DynamicResource WindowBackgroundBrush}" Padding="10,4">
+                        <Grid x:Name="PathBarHost" MinHeight="22"/>
+                    </Border>
+                    <Rectangle Grid.Row="3" Height="1" Fill="{DynamicResource DividerBrush}"/>
+
+                    <views:DetailView x:Name="DetailPane" Grid.Row="4"/>
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <!-- ── type-select HUD ─────────────────────────────────────── -->
+        <Border x:Name="TypeSelectHud" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                Margin="0,0,0,56" CornerRadius="10" Padding="16,9"
+                Background="{DynamicResource MenuBackgroundBrush}"
+                BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.3"/>
+            </Border.Effect>
+            <TextBlock x:Name="TypeSelectText" FontSize="17" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextPrimaryBrush}"/>
+        </Border>
+
+        <!-- ── 알림(오류/안내) 오버레이 ────────────────────────────── -->
+        <Grid x:Name="AlertOverlay" Visibility="Collapsed" Background="#48000000"
+              MouseLeftButtonDown="OnAlertScrim">
+            <Border Width="340" Padding="20" CornerRadius="16" VerticalAlignment="Center"
+                    Background="{DynamicResource MenuBackgroundBrush}"
+                    BorderBrush="{DynamicResource ControlStrokeBrush}" BorderThickness="1"
+                    MouseLeftButtonDown="OnPanelClickEat">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="24" ShadowDepth="8" Opacity="0.3"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock x:Name="AlertTitle" FontSize="15" FontWeight="Bold" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                    <TextBlock x:Name="AlertMessage" FontSize="12" Margin="0,14,0,0" TextWrapping="Wrap"
+                               TextAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}"
+                               MaxHeight="320"/>
+                    <Button x:Name="AlertOk" Margin="0,16,0,0" Style="{StaticResource DialogButton}"
+                            Content="확인" Click="OnAlertOk"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ── 확인 다이얼로그 오버레이 ────────────────────────────── -->
+        <Grid x:Name="ConfirmOverlay" Visibility="Collapsed" Background="#48000000"
+              MouseLeftButtonDown="OnConfirmScrim">
+            <Border Width="320" Padding="20" CornerRadius="16" VerticalAlignment="Center"
+                    Background="{DynamicResource MenuBackgroundBrush}"
+                    BorderBrush="{DynamicResource ControlStrokeBrush}" BorderThickness="1"
+                    MouseLeftButtonDown="OnPanelClickEat">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="24" ShadowDepth="8" Opacity="0.3"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBlock x:Name="ConfirmTitle" FontSize="15" FontWeight="Bold" HorizontalAlignment="Center"
+                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                    <TextBlock x:Name="ConfirmMessage" FontSize="12" Margin="0,14,0,0" TextWrapping="Wrap"
+                               TextAlignment="Center" Foreground="{DynamicResource TextSecondaryBrush}"
+                               MaxHeight="320"/>
+                    <Grid Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="10"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="ConfirmActionBtn" Grid.Column="0" Style="{StaticResource DialogButton}"
+                                Click="OnConfirmAction"/>
+                        <Button x:Name="ConfirmCancelBtn" Grid.Column="2" Style="{StaticResource DialogButton}"
+                                Content="취소" Click="OnConfirmCancel"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

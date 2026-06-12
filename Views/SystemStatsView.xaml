@@ -1,0 +1,111 @@
+<UserControl x:Class="XFinder.Views.SystemStatsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:monitor="clr-namespace:XFinder.Views.Monitor">
+    <!-- mac 소스 대응: Sources/XFinder/Views/RootView.swift — SystemStatsView (툴바 CPU/메모리/디스크 컴팩트 표시 + popover) -->
+    <UserControl.Resources>
+        <!-- 플레인 지표 버튼 — 호버 시 옅은 하이라이트 -->
+        <Style x:Key="StatButton" TargetType="Button">
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="4,3"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" CornerRadius="5" Background="Transparent"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <!-- CPU -->
+            <Button x:Name="BtnCpu" Style="{StaticResource StatButton}" Click="OnCpuClick"
+                    ToolTip="CPU 사용량 — 클릭하면 추이·온도·부하 프로세스 보기">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="CpuIcon" FontFamily="{StaticResource IconFontFamily}"
+                               FontSize="12" VerticalAlignment="Center"/>
+                    <Rectangle x:Name="CpuGap" Width="4"/>
+                    <TextBlock x:Name="CpuText" Text="0%" FontSize="11" FontWeight="SemiBold"
+                               MinWidth="26" TextAlignment="Left" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                </StackPanel>
+            </Button>
+            <Rectangle x:Name="Gap1" Width="11"/>
+
+            <!-- 메모리 -->
+            <Button x:Name="BtnMem" Style="{StaticResource StatButton}" Click="OnMemClick"
+                    ToolTip="메모리 사용량 — 클릭하면 앱·캐시·스왑 상세 보기">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="MemIcon" FontFamily="{StaticResource IconFontFamily}"
+                               FontSize="12" VerticalAlignment="Center"/>
+                    <Rectangle x:Name="MemGap" Width="4"/>
+                    <TextBlock x:Name="MemText" Text="0%" FontSize="11" FontWeight="SemiBold"
+                               MinWidth="26" TextAlignment="Left" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                </StackPanel>
+            </Button>
+            <Rectangle x:Name="Gap2" Width="11"/>
+
+            <!-- 디스크 -->
+            <Button x:Name="BtnDisk" Style="{StaticResource StatButton}" Click="OnDiskClick"
+                    ToolTip="디스크 사용량 — 클릭하면 용량 분류·S.M.A.R.T. 상태 보기">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="DiskIcon" FontFamily="{StaticResource IconFontFamily}"
+                               FontSize="12" VerticalAlignment="Center"/>
+                    <Rectangle x:Name="DiskGap" Width="4"/>
+                    <TextBlock x:Name="DiskText" Text="0%" FontSize="11" FontWeight="SemiBold"
+                               MinWidth="26" TextAlignment="Left" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                </StackPanel>
+            </Button>
+        </StackPanel>
+
+        <!-- 상세 팝업 3종 (아래 방향 popover 대응) -->
+        <Popup x:Name="CpuPopup" StaysOpen="False" Placement="Bottom" AllowsTransparency="True"
+               PopupAnimation="Fade" PlacementTarget="{Binding ElementName=BtnCpu}">
+            <Border Margin="10" CornerRadius="10" BorderThickness="1"
+                    Background="{DynamicResource MenuBackgroundBrush}"
+                    BorderBrush="{DynamicResource DividerBrush}">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.35"/>
+                </Border.Effect>
+                <monitor:CpuDetailView x:Name="CpuDetail"/>
+            </Border>
+        </Popup>
+
+        <Popup x:Name="MemPopup" StaysOpen="False" Placement="Bottom" AllowsTransparency="True"
+               PopupAnimation="Fade" PlacementTarget="{Binding ElementName=BtnMem}">
+            <Border Margin="10" CornerRadius="10" BorderThickness="1"
+                    Background="{DynamicResource MenuBackgroundBrush}"
+                    BorderBrush="{DynamicResource DividerBrush}">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.35"/>
+                </Border.Effect>
+                <monitor:MemoryDetailView x:Name="MemDetail"/>
+            </Border>
+        </Popup>
+
+        <Popup x:Name="DiskPopup" StaysOpen="False" Placement="Bottom" AllowsTransparency="True"
+               PopupAnimation="Fade" PlacementTarget="{Binding ElementName=BtnDisk}">
+            <Border Margin="10" CornerRadius="10" BorderThickness="1"
+                    Background="{DynamicResource MenuBackgroundBrush}"
+                    BorderBrush="{DynamicResource DividerBrush}">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.35"/>
+                </Border.Effect>
+                <monitor:DiskDetailView x:Name="DiskDetail"/>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>

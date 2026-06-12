@@ -1,0 +1,7 @@
+bin/
+obj/
+*.user
+build/
+build-shot.png
+Scripts/resume-claude.cmd
+.claude/scheduled_tasks.lock
